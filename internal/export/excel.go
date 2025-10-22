@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/lva100/go-peo/model"
+	"github.com/lva100/go-service/internal/models"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -16,7 +16,7 @@ func NewExcel() *Excel {
 	return &Excel{}
 }
 
-func (e *Excel) Generate(data []model.UslReport) (*bytes.Buffer, error) {
+func (e *Excel) Generate(data []models.UslReport) (*bytes.Buffer, error) {
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {

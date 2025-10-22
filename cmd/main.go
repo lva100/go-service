@@ -3,23 +3,32 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/lva100/go-service/config"
+	"github.com/lva100/go-service/pkg/logger"
+	"github.com/lva100/go-service/pkg/logger/output"
 )
 
-const (
-	PORT = ":3000"
-)
+func initializeLogger(fn string) *logger.Logger {
+	logInstance, err := logger.NewLogger(fn)
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	return logInstance
+}
 
 func main() {
 	config.Init()
+	outputLogs := output.Init(config.GetPort("LOG_PATH"))
+
+	logInstance := initializeLogger(outputLogs.CurrentFile)
+	logInstance.Info("Test record")
 	_ = config.NewDatabaseConfig()
-	servicePort := config.GetPort("PORT")
+
+	fmt.Println(outputLogs.CurrentFile)
+	// servicePort := config.GetPort("PORT")
 
 	// dbPool, err := database.CreateDbPool(dbConfig, logInstance)
 	// if err != nil {
@@ -27,13 +36,13 @@ func main() {
 	// }
 	// defer dbPool.Close()
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("welcome"))
-	})
-	fmt.Printf("Service starting on port %s\n", servicePort)
-	http.ListenAndServe(servicePort, r)
+	// r := chi.NewRouter()
+	// r.Use(middleware.Logger)
+	// r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	// 	w.Write([]byte("welcome"))
+	// })
+	// fmt.Printf("Service starting on port %s\n", servicePort)
+	// http.ListenAndServe(servicePort, r)
 
 	// create a scheduler
 	s, err := gocron.NewScheduler()
