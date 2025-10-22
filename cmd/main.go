@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-co-op/gocron/v2"
+	"github.com/lva100/go-service/config"
 )
 
 const (
@@ -16,19 +17,31 @@ const (
 )
 
 func main() {
+	config.Init()
+	_ = config.NewDatabaseConfig()
+	servicePort := config.GetPort("PORT")
+
+	// dbPool, err := database.CreateDbPool(dbConfig, logInstance)
+	// if err != nil {
+	// 	logInstance.Error("SQL Server connected fail", err)
+	// }
+	// defer dbPool.Close()
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("welcome"))
 	})
-	fmt.Printf("Service starting on port %s\n", PORT)
-	// http.ListenAndServe(PORT, r)
+	fmt.Printf("Service starting on port %s\n", servicePort)
+	http.ListenAndServe(servicePort, r)
 
 	// create a scheduler
 	s, err := gocron.NewScheduler()
 	if err != nil {
 		log.Fatalf("Error %s", err)
 	}
+
+	defer func() { _ = s.Shutdown() }()
 
 	// add a job to the scheduler
 	j, err := s.NewJob(
@@ -42,7 +55,7 @@ func main() {
 		),
 	)
 	if err != nil {
-		// handle error
+		log.Fatalf("Error %s", err)
 	}
 	// each job has a unique id
 	fmt.Println(j.ID())
@@ -51,9 +64,4 @@ func main() {
 	s.Start()
 	time.Sleep(60 * time.Second)
 
-	// when you're done, shut it down
-	// err = s.Shutdown()
-	// if err != nil {
-	// 	// handle error
-	// }
 }
