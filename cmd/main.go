@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/lva100/go-service/config"
+	database "github.com/lva100/go-service/internal/db"
 	"github.com/lva100/go-service/pkg/logger"
 	"github.com/lva100/go-service/pkg/logger/output"
 )
@@ -25,16 +26,16 @@ func main() {
 
 	logInstance := initializeLogger(outputLogs.CurrentFile)
 	logInstance.Info("Test record")
-	_ = config.NewDatabaseConfig()
+	dbConfig := config.NewDatabaseConfig()
 
 	fmt.Println(outputLogs.CurrentFile)
 	// servicePort := config.GetPort("PORT")
 
-	// dbPool, err := database.CreateDbPool(dbConfig, logInstance)
-	// if err != nil {
-	// 	logInstance.Error("SQL Server connected fail", err)
-	// }
-	// defer dbPool.Close()
+	dbPool, err := database.CreateDbPool(dbConfig, logInstance)
+	if err != nil {
+		logInstance.Error("SQL Server connected fail", err)
+	}
+	defer dbPool.Close()
 
 	// r := chi.NewRouter()
 	// r.Use(middleware.Logger)

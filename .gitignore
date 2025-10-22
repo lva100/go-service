@@ -1,2 +1,4 @@
 .env
-/.code
+logs/
+logs/*.log
+
