@@ -2,13 +2,11 @@ package models
 
 import "time"
 
-type UslReport struct {
-	Start    time.Time
-	Code_MO  string
-	OrgName  string
-	Code_Usl string
-	MC       int16
-	MF       int16
-	Usl_vol  float64
-	Usl_fin  float64
+type Otkrep struct {
+	ENP        string    `db:"ENP"`
+	LpuCodeNew string    `db:"LpuCodeNew"`
+	LpuNameNew string    `db:"LpuNameNew"`
+	LpuStart   time.Time `db:"LpuStart"`
+	LpuFinish  time.Time `db:"LpuFinish"`
+	LpuCode    string    `db:"LpuCode"`
 }
