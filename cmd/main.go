@@ -3,8 +3,14 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"path"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/go-co-op/gocron-ui/server"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/lva100/go-service/config"
 	database "github.com/lva100/go-service/internal/db"
@@ -29,7 +35,6 @@ func main() {
 	outputLogs := output.Init(config.GetPort("LOG_PATH"))
 
 	logInstance = initializeLogger(outputLogs.CurrentFile)
-	logInstance.Info("Test record")
 	dbConfig := config.NewDatabaseConfig()
 
 	dbPool, err := database.CreateDbPool(dbConfig, logInstance)
@@ -54,8 +59,16 @@ func main() {
 
 	// add a job to the scheduler
 	j, err := s.NewJob(
-		gocron.DurationJob(
-			30*time.Second,
+		/*
+			gocron.DurationJob(
+				30*time.Second,
+			),*/
+		gocron.DailyJob(
+			1,
+			gocron.NewAtTimes(
+				gocron.NewAtTime(2, 30, 0),
+				gocron.NewAtTime(3, 30, 0),
+			),
 		),
 		gocron.NewTask(
 			func() {
@@ -74,24 +87,36 @@ func main() {
 		s.Start()
 	}()
 
+	go func() {
+		newStrPort := strings.Replace(config.GetPort("PORT"), ":", "", 1)
+		intPort, err := strconv.Atoi(newStrPort)
+		if err != nil {
+			logInstance.Error("Не возможно определить порт сервера: ", err)
+		}
+		srv := server.NewServer(s, intPort)
+		// srv := server.NewServer(scheduler, 8080, server.WithTitle("My Custom Scheduler")) // with custom title if you want to customize the title of the UI (optional)
+		log.Printf("GoCron UI available at http://localhost%s\n", config.GetPort("PORT"))
+		log.Fatal(http.ListenAndServe(config.GetPort("PORT"), srv.Router))
+	}()
+
 	select {}
 
 }
 
 func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger) {
-	logger.Info("Получение данных из БД о МО")
+	logger.Info("Получение списка МО из БД")
 	moList, err := rep.GetMo()
 	if err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
-	logger.Info(fmt.Sprintf("Получено записей из БД о МО: %d\n", len(moList)))
+	logger.Info(fmt.Sprintf("Получено записей о МО: %d\n", len(moList)))
 
-	logger.Info("Получение данных из БД")
+	logger.Info("Получение данных об откреплениях из БД")
 	data, err := rep.GetReport()
 	if err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
-	logger.Info(fmt.Sprintf("Получено записей из БД: %d\n", len(data)))
+	logger.Info(fmt.Sprintf("Получено записей об откреплениях: %d\n", len(data)))
 
 	var mo []models.Otkrep
 	for _, v := range moList {
@@ -100,24 +125,22 @@ func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger) {
 		})
 		logger.Info(fmt.Sprintf("Количество записей: %d\n", len(mo)))
 		logger.Info("Экспорт данных в Excel")
+
+		workdir, err := os.Getwd()
+		if err != nil {
+			fmt.Println(err)
+		}
+		expDirectory := path.Join(workdir, config.GetPort("EXPORT_PATH"))
 		f, err := export.GenerateXLS(mo)
 		if err != nil {
 			log.Fatalf("Ошибка формирования файла Excel: %v", err)
 		}
-		file_name := fmt.Sprintf("M%s_%s.xlsx", v, time.Now().Format("2006-01-02T15-04-05"))
+		file_name := fmt.Sprintf("%s/M%s_%s.xlsx", expDirectory, v, time.Now().Format("2006-01-02T15-04-05"))
 		if err := f.SaveAs(file_name); err != nil {
 			fmt.Println(err)
 		}
 		logger.Info(fmt.Sprintf("Сформирован файл: %s\n", file_name))
 	}
-	// for _, v := range data {
-	// 	fmt.Println(v.LpuNameNew)
-	// }
-	/*
-		evens := Filter(nums, func(n int) bool {
-			return n%2 == 0
-		})
-	*/
 }
 
 func Filter(slice []models.Otkrep, fn func(models.Otkrep) bool) []models.Otkrep {

@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/lva100/go-service/internal/models"
@@ -26,7 +27,7 @@ func (r *SrzRepository) GetMo() ([]string, error) {
 		  select distinct p.lpu
 			from VAtt v
 			join [srz3_00].dbo.PEOPLE p on v.pid = p.id
-			where MPI = 5530375
+			where MPI = 5532052
 			and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
 			and  v.LPUPROFILE = 1
 			order by p.lpu
@@ -71,7 +72,7 @@ func (r *SrzRepository) GetReport() ([]models.Otkrep, error) {
 				p.lpu LpuCode
 			from VAtt v
 			join [srz3_00].dbo.PEOPLE p on v.pid = p.id
-			where MPI = 5530375
+			where MPI = 5532052
 			and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
 			and  v.LPUPROFILE = 1
 			order by p.lpu
@@ -110,6 +111,24 @@ func (r *SrzRepository) GetReport() ([]models.Otkrep, error) {
 		r.CustomLogger.Error("SQL Query error", err)
 	}
 	return otkrepItems, nil
+}
+
+func (r *SrzRepository) CreateRequest() error {
+	queryTmp := `INSERT INTO MPI_MSG
+					VALUES (NULL,getdate(),getdate(),NULL
+									,'<mpi:getViewDataAttachStartRequest xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><com:externalRequestId>776B09D6-DB4C-4D8A-99D9-47013F7DBCF1</com:externalRequestId><mpi:criteria xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><mpi:fieldNameAttached>smo_okato</mpi:fieldNameAttached><mpi:logicOperation>0</mpi:logicOperation><mpi:value>61000</mpi:value></mpi:criteria><mpi:criteria xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><mpi:fieldNameAttached>mo_okato</mpi:fieldNameAttached><mpi:logicOperation>1</mpi:logicOperation><mpi:value>61000</mpi:value></mpi:criteria></mpi:getViewDataAttachStartRequest>'
+									,NULL,newid(),'getViewDataAttachStartRequest','mpiAsyncOperation'
+									,'4,'+FORMAT(GETDATE(), 'yyyyMMdd')
+									,'http://10.255.87.30/api/t-foms/integration/ws/24.1.2/wsdl/mpiAsyncOperationsServiceWs'
+									,1
+									,NULL,'p_mpi_Response_ViewDataAttach'
+									,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)`
+	query := strings.Replace(queryTmp, "$tmp$", "24.1.2", -1)
+	_, err := r.Dbpool.ExecContext(
+		context.Background(),
+		query,
+	)
+	return err
 }
 
 func (r *SrzRepository) InsertFLK(fname, fname_i string, phase_k int, status,

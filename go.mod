@@ -5,6 +5,7 @@ go 1.24.0
 toolchain go1.24.9
 
 require (
+	github.com/go-co-op/gocron-ui v0.1.0 // indirect
 	github.com/go-co-op/gocron/v2 v2.17.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
@@ -12,12 +13,15 @@ require (
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gookit/goutil v0.7.1 // indirect
 	github.com/gookit/gsr v0.1.1 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/microsoft/go-mssqldb v1.9.3 // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/rs/cors v1.11.1 // indirect
 	github.com/tiendc/go-deepcopy v1.7.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
