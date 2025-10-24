@@ -31,10 +31,13 @@ func initializeLogger(fn string) *logger.Logger {
 
 func main() {
 	var logInstance *logger.Logger
-	config.Init()
-	outputLogs := output.Init(config.GetPort("LOG_PATH"))
+	var logFilename *output.File
 
-	logInstance = initializeLogger(outputLogs.CurrentFile)
+	config.Init()
+
+	logFilename = output.Init(config.GetPath("LOG_PATH"))
+	logInstance = initializeLogger(logFilename.Filename)
+
 	dbConfig := config.NewDatabaseConfig()
 
 	dbPool, err := database.CreateDbPool(dbConfig, logInstance)
@@ -45,7 +48,6 @@ func main() {
 
 	srzRep := repositories.NewSrzRepository(dbPool, logInstance)
 
-	// create a scheduler
 	s, err := gocron.NewScheduler()
 	if err != nil {
 		logInstance.Error("Error: ", err)
@@ -57,7 +59,6 @@ func main() {
 		logInstance.Info("Служба остановлена")
 	}()
 
-	// add a job to the scheduler
 	j, err := s.NewJob(
 		/*
 			gocron.DurationJob(
@@ -67,11 +68,17 @@ func main() {
 			1,
 			gocron.NewAtTimes(
 				gocron.NewAtTime(2, 30, 0),
-				gocron.NewAtTime(3, 30, 0),
 			),
 		),
 		gocron.NewTask(
 			func() {
+				fileDate := logFilename.CurrentDate
+				if fileDate != output.GetCurrentDate() {
+					logInstance.Close()
+					logFilename = output.Init(config.GetPath("LOG_PATH"))
+					logInstance = initializeLogger(logFilename.Filename)
+					logInstance.Info("Сервис в работе. Создан новый файл логов.")
+				}
 				logInstance.Info("Старт задачи")
 				GetOtkrep(srzRep, logInstance)
 				logInstance.Info("Остановка задачи")
@@ -130,7 +137,7 @@ func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		expDirectory := path.Join(workdir, config.GetPort("EXPORT_PATH"))
+		expDirectory := path.Join(workdir, config.GetPath("EXPORT_PATH"))
 		f, err := export.GenerateXLS(mo)
 		if err != nil {
 			log.Fatalf("Ошибка формирования файла Excel: %v", err)

@@ -35,7 +35,10 @@ func getInt(key string, defaultValue int) int {
 
 func GetPort(key string) string {
 	return getString(key, ":1111")
+}
 
+func GetPath(key string) string {
+	return getString(key, "tmp")
 }
 
 /*

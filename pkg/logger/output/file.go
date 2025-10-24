@@ -7,29 +7,29 @@ import (
 	"time"
 )
 
-type file struct {
+type File struct {
+	CurrentDate string
 	LogDir      string
-	CurrentFile string
-	NewFile     string
+	Filename    string
 }
 
-func Init(logDir string) *file {
+func Init(logDir string) *File {
 	workdir, err := os.Getwd()
 	if err != nil {
 		fmt.Println(err)
 	}
 	logDirectory := path.Join(workdir, logDir)
-	return &file{
+	return &File{
+		CurrentDate: time.Now().Format("2006-01-02"),
 		LogDir:      logDirectory,
-		CurrentFile: fmt.Sprintf("%s/otkrep_service_%s.log", logDirectory, time.Now().Format("2006-01-02")),
-		NewFile:     fmt.Sprintf("%s/otkrep_service_%s.log", logDirectory, time.Now().Format("2006-01-02")),
+		Filename:    fmt.Sprintf("%s/otkrep_service_%s.log", logDirectory, time.Now().Format("2006-01-02")),
 	}
 }
 
-func (f *file) GetFileName() *file {
-	return &file{
-		LogDir:      f.LogDir,
-		CurrentFile: f.CurrentFile,
-		NewFile:     fmt.Sprintf("%s/otkrep_service_%s.log", f.LogDir, time.Now().Format("2006-01-02")),
-	}
+func GetCurrentDate() string {
+	return time.Now().Format("2006-01-02")
+}
+
+func (f *File) GetCurrentFileName() string {
+	return fmt.Sprintf("%s/otkrep_service_%s.log", f.LogDir, time.Now().Format("2006-01-02"))
 }
