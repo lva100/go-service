@@ -41,6 +41,10 @@ func GetPath(key string) string {
 	return getString(key, "tmp")
 }
 
+func GetApiVersion() string {
+	return getString("FERZL_API_VER", "24.1.2")
+}
+
 /*
 	func getBool(key string, defaultValue bool) bool {
 		value := os.Getenv(key)

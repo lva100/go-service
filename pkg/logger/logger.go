@@ -40,5 +40,6 @@ func (l *Logger) Error(msg string, err error) {
 }
 
 func (l *Logger) Close() {
+	l.infoLogger.Printf("Запись в текущий файл логов завершена.")
 	l.file.Close()
 }

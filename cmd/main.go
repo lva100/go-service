@@ -21,8 +21,8 @@ import (
 	"github.com/lva100/go-service/pkg/logger/output"
 )
 
-func initializeLogger(fn string) *logger.Logger {
-	logInstance, err := logger.NewLogger(fn)
+func initializeLogger(fname string) *logger.Logger {
+	logInstance, err := logger.NewLogger(fname)
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
@@ -32,6 +32,7 @@ func initializeLogger(fn string) *logger.Logger {
 func main() {
 	var logInstance *logger.Logger
 	var logFilename *output.File
+	var lastInsertId int64
 
 	config.Init()
 
@@ -59,11 +60,41 @@ func main() {
 		logInstance.Info("Служба остановлена")
 	}()
 
-	j, err := s.NewJob(
-		/*
-			gocron.DurationJob(
-				30*time.Second,
-			),*/
+	j1, err := s.NewJob(
+		gocron.DailyJob(
+			1,
+			gocron.NewAtTimes(
+				gocron.NewAtTime(1, 30, 0),
+			),
+		),
+		gocron.NewTask(
+			func(lastid int64) {
+				fileDate := logFilename.CurrentDate
+				if fileDate != output.GetCurrentDate() {
+					logInstance.Close()
+					logFilename = output.Init(config.GetPath("LOG_PATH"))
+					logInstance = initializeLogger(logFilename.Filename)
+					logInstance.Info("Сервис в работе. Создан новый файл логов.")
+				}
+				logInstance.Info("Старт задачи")
+				lastId, err := srzRep.CreateRequest(config.GetApiVersion())
+				if err != nil {
+					log.Fatalf("Server failed: %v", err)
+				}
+				lastInsertId = lastId
+				logInstance.Info("Остановка задачи")
+			},
+			lastInsertId,
+		),
+	)
+	if err != nil {
+		log.Fatalf("Error %s", err)
+	}
+
+	j2, err := s.NewJob(
+		/*gocron.DurationJob(
+			30*time.Second,
+		),*/
 		gocron.DailyJob(
 			1,
 			gocron.NewAtTimes(
@@ -80,7 +111,7 @@ func main() {
 					logInstance.Info("Сервис в работе. Создан новый файл логов.")
 				}
 				logInstance.Info("Старт задачи")
-				GetOtkrep(srzRep, logInstance)
+				GetOtkrep(srzRep, logInstance, lastInsertId)
 				logInstance.Info("Остановка задачи")
 			},
 		),
@@ -90,7 +121,8 @@ func main() {
 	}
 
 	go func() {
-		logInstance.Info(fmt.Sprintf("Зарегистрирована задача с номером: %s\n", j.ID()))
+		logInstance.Info(fmt.Sprintf("Зарегистрирована задача с номером: %s\n", j1.ID()))
+		logInstance.Info(fmt.Sprintf("Зарегистрирована задача с номером: %s\n", j2.ID()))
 		s.Start()
 	}()
 
@@ -100,8 +132,9 @@ func main() {
 		if err != nil {
 			logInstance.Error("Не возможно определить порт сервера: ", err)
 		}
-		srv := server.NewServer(s, intPort)
-		// srv := server.NewServer(scheduler, 8080, server.WithTitle("My Custom Scheduler")) // with custom title if you want to customize the title of the UI (optional)
+		srv := server.NewServer(s, intPort, server.WithTitle("Go Service"))
+		// srv := server.NewServer(scheduler, 8080, server.WithTitle("My Custom Scheduler"))
+		// with custom title if you want to customize the title of the UI (optional)
 		log.Printf("GoCron UI available at http://localhost%s\n", config.GetPort("PORT"))
 		log.Fatal(http.ListenAndServe(config.GetPort("PORT"), srv.Router))
 	}()
@@ -110,16 +143,20 @@ func main() {
 
 }
 
-func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger) {
+func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger, lastInsertId int64) {
 	logger.Info("Получение списка МО из БД")
-	moList, err := rep.GetMo()
+	moList, err := rep.GetMo(lastInsertId)
 	if err != nil {
 		log.Fatalf("Server failed: %v", err)
+	}
+	if len(moList) == 0 {
+		logger.Info("Нет данных, нечего писать")
+		return
 	}
 	logger.Info(fmt.Sprintf("Получено записей о МО: %d\n", len(moList)))
 
 	logger.Info("Получение данных об откреплениях из БД")
-	data, err := rep.GetReport()
+	data, err := rep.GetReport(lastInsertId)
 	if err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
@@ -130,7 +167,7 @@ func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger) {
 		mo = Filter(data, func(d models.Otkrep) bool {
 			return d.LpuCode == v
 		})
-		logger.Info(fmt.Sprintf("Количество записей: %d\n", len(mo)))
+		logger.Info(fmt.Sprintf("Количество записей для МО: %s - %d\n", v, len(mo)))
 		logger.Info("Экспорт данных в Excel")
 
 		workdir, err := os.Getwd()

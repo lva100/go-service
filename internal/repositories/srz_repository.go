@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lva100/go-service/internal/models"
 	"github.com/lva100/go-service/pkg/logger"
 )
@@ -22,12 +23,12 @@ func NewSrzRepository(dbpool *sql.DB, logger *logger.Logger) *SrzRepository {
 	}
 }
 
-func (r *SrzRepository) GetMo() ([]string, error) {
+func (r *SrzRepository) GetMo(id int64) ([]string, error) {
 	query := `
 		  select distinct p.lpu
 			from VAtt v
 			join [srz3_00].dbo.PEOPLE p on v.pid = p.id
-			where MPI = 5532052
+			where MPI = @id
 			and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
 			and  v.LPUPROFILE = 1
 			order by p.lpu
@@ -37,7 +38,7 @@ func (r *SrzRepository) GetMo() ([]string, error) {
 
 	var moItems []string
 
-	rows, err := r.Dbpool.QueryContext(ctx, query)
+	rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("id", id))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			r.CustomLogger.Error("Timeout from database", err)
@@ -59,10 +60,11 @@ func (r *SrzRepository) GetMo() ([]string, error) {
 	if err = rows.Err(); err != nil {
 		r.CustomLogger.Error("SQL Query error", err)
 	}
+
 	return moItems, nil
 }
 
-func (r *SrzRepository) GetReport() ([]models.Otkrep, error) {
+func (r *SrzRepository) GetReport(id int64) ([]models.Otkrep, error) {
 	query := `
 		  select v.ENP,
 				v.LPU LpuCodeNew,
@@ -72,7 +74,7 @@ func (r *SrzRepository) GetReport() ([]models.Otkrep, error) {
 				p.lpu LpuCode
 			from VAtt v
 			join [srz3_00].dbo.PEOPLE p on v.pid = p.id
-			where MPI = 5532052
+			where MPI = @id
 			and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
 			and  v.LPUPROFILE = 1
 			order by p.lpu
@@ -83,7 +85,7 @@ func (r *SrzRepository) GetReport() ([]models.Otkrep, error) {
 	var otkrepItems []models.Otkrep
 
 	// rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("dt_start", from), sql.Named("dt_end", to))
-	rows, err := r.Dbpool.QueryContext(ctx, query)
+	rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("id", id))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			r.CustomLogger.Error("Timeout from database", err)
@@ -113,24 +115,33 @@ func (r *SrzRepository) GetReport() ([]models.Otkrep, error) {
 	return otkrepItems, nil
 }
 
-func (r *SrzRepository) CreateRequest() error {
+func (r *SrzRepository) CreateRequest(apiVer string) (int64, error) {
+	id := uuid.New()
 	queryTmp := `INSERT INTO MPI_MSG
 					VALUES (NULL,getdate(),getdate(),NULL
-									,'<mpi:getViewDataAttachStartRequest xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><com:externalRequestId>776B09D6-DB4C-4D8A-99D9-47013F7DBCF1</com:externalRequestId><mpi:criteria xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><mpi:fieldNameAttached>smo_okato</mpi:fieldNameAttached><mpi:logicOperation>0</mpi:logicOperation><mpi:value>61000</mpi:value></mpi:criteria><mpi:criteria xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><mpi:fieldNameAttached>mo_okato</mpi:fieldNameAttached><mpi:logicOperation>1</mpi:logicOperation><mpi:value>61000</mpi:value></mpi:criteria></mpi:getViewDataAttachStartRequest>'
-									,NULL,newid(),'getViewDataAttachStartRequest','mpiAsyncOperation'
-									,'4,'+FORMAT(GETDATE(), 'yyyyMMdd')
-									,'http://10.255.87.30/api/t-foms/integration/ws/24.1.2/wsdl/mpiAsyncOperationsServiceWs'
-									,1
-									,NULL,'p_mpi_Response_ViewDataAttach'
-									,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)`
-	query := strings.Replace(queryTmp, "$tmp$", "24.1.2", -1)
-	_, err := r.Dbpool.ExecContext(
+								,'<mpi:getViewDataAttachStartRequest xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><com:externalRequestId>$id$</com:externalRequestId><mpi:criteria xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><mpi:fieldNameAttached>smo_okato</mpi:fieldNameAttached><mpi:logicOperation>0</mpi:logicOperation><mpi:value>61000</mpi:value></mpi:criteria><mpi:criteria xmlns:com="http://ffoms.ru/types/$tmp$/commonTypes" xmlns:mpi="http://ffoms.ru/types/$tmp$/mpiAsyncOperationsSchema"><mpi:fieldNameAttached>mo_okato</mpi:fieldNameAttached><mpi:logicOperation>1</mpi:logicOperation><mpi:value>61000</mpi:value></mpi:criteria></mpi:getViewDataAttachStartRequest>'
+								,NULL,'$id$','getViewDataAttachStartRequest','mpiAsyncOperation'
+								,'4,'+FORMAT(GETDATE(), 'yyyyMMdd')
+								,'http://10.255.87.30/api/t-foms/integration/ws/$tmp$/wsdl/mpiAsyncOperationsServiceWs'
+								,1
+								,NULL,'p_mpi_Response_ViewDataAttach'
+								,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+								select ID = convert(bigint, SCOPE_IDENTITY())
+								`
+	queryTmp = strings.ReplaceAll(queryTmp, "$tmp$", apiVer)
+	query := strings.ReplaceAll(queryTmp, "$id$", id.String())
+	var lastInseredId int64
+	if err := r.Dbpool.QueryRowContext(
 		context.Background(),
 		query,
-	)
-	return err
+	).Scan(&lastInseredId); err != nil {
+		r.CustomLogger.Error("SQL Query error", err)
+		return 0, err
+	}
+	return lastInseredId, nil
 }
 
+/*
 func (r *SrzRepository) InsertFLK(fname, fname_i string, phase_k int, status,
 	schet_code, ferr_id string, n_line int, n_col, fc_element, code_err, text_err string) error {
 	query := `INSERT INTO Flk_err
@@ -167,7 +178,7 @@ func (r *SrzRepository) InsertLK(fname, fname_i string, phase_k int, status,
 	)
 	return err
 }
-
+*/
 /*
 func (r *ErrRepository) GetReport(from, to string) ([]model.UslReport, error) {
 	query := "SELECT 1"
