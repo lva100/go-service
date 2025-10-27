@@ -39,8 +39,8 @@ func GenerateXLS(data []models.Otkrep) (*excelize.File, error) {
 	f.SetCellValue("Sheet1", "A1", "ЕНП")
 	f.SetCellValue("Sheet1", "B1", "Код МО новый")
 	f.SetCellValue("Sheet1", "C1", "Наименование МО новое")
-	f.SetCellValue("Sheet1", "D1", "Дата прикрепления")
-	f.SetCellValue("Sheet1", "E1", "Дата открепления")
+	f.SetCellValue("Sheet1", "D1", "Дата прикрепления (к новой МО)")
+	f.SetCellValue("Sheet1", "E1", "Дата открепления (нужно проставить в МИС)")
 	f.SetCellValue("Sheet1", "F1", "Код МО")
 
 	for index, value := range data {
@@ -55,8 +55,8 @@ func GenerateXLS(data []models.Otkrep) (*excelize.File, error) {
 	f.SetColWidth("Sheet1", "A", "A", 20)
 	f.SetColWidth("Sheet1", "B", "B", 15)
 	f.SetColWidth("Sheet1", "C", "C", 60)
-	f.SetColWidth("Sheet1", "D", "D", 20)
-	f.SetColWidth("Sheet1", "E", "E", 20)
+	f.SetColWidth("Sheet1", "D", "D", 30)
+	f.SetColWidth("Sheet1", "E", "E", 40)
 	f.SetColWidth("Sheet1", "F", "F", 10)
 
 	return f, nil

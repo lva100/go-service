@@ -10,10 +10,10 @@ import (
 
 func Init() {
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file")
+		log.Println("Файл .env не найден")
 		return
 	}
-	log.Println(".env file loaded")
+	log.Println("Файл .env успешно загружен")
 }
 
 func getString(key, defaultValue string) string {
@@ -33,8 +33,8 @@ func getInt(key string, defaultValue int) int {
 	return i
 }
 
-func GetPort(key string) string {
-	return getString(key, ":1111")
+func GetPort() string {
+	return getString("PORT", ":1111")
 }
 
 func GetPath(key string) string {
@@ -43,6 +43,14 @@ func GetPath(key string) string {
 
 func GetApiVersion() string {
 	return getString("FERZL_API_VER", "24.1.2")
+}
+
+func GetToken() string {
+	return getString("FERZL_TOKEN", "TEST")
+}
+
+func GetTestEnp() string {
+	return getString("TEST_ENP", "111111111111111")
 }
 
 /*

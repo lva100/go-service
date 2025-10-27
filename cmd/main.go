@@ -82,6 +82,7 @@ func main() {
 					log.Fatalf("Server failed: %v", err)
 				}
 				lastInsertId = lastId
+				logInstance.Info(fmt.Sprintf("ID запроса: %d\n", lastInsertId))
 				logInstance.Info("Остановка задачи")
 			},
 			lastInsertId,
@@ -127,16 +128,14 @@ func main() {
 	}()
 
 	go func() {
-		newStrPort := strings.Replace(config.GetPort("PORT"), ":", "", 1)
+		newStrPort := strings.Replace(config.GetPort(), ":", "", 1)
 		intPort, err := strconv.Atoi(newStrPort)
 		if err != nil {
 			logInstance.Error("Не возможно определить порт сервера: ", err)
 		}
 		srv := server.NewServer(s, intPort, server.WithTitle("Go Service"))
-		// srv := server.NewServer(scheduler, 8080, server.WithTitle("My Custom Scheduler"))
-		// with custom title if you want to customize the title of the UI (optional)
-		log.Printf("GoCron UI available at http://localhost%s\n", config.GetPort("PORT"))
-		log.Fatal(http.ListenAndServe(config.GetPort("PORT"), srv.Router))
+		log.Printf("UI available at http://localhost%s\n", config.GetPort())
+		log.Fatal(http.ListenAndServe(config.GetPort(), srv.Router))
 	}()
 
 	select {}
@@ -150,7 +149,7 @@ func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger, lastInser
 		log.Fatalf("Server failed: %v", err)
 	}
 	if len(moList) == 0 {
-		logger.Info("Нет данных, нечего писать")
+		logger.Info("Нет данных, нечего выгружать")
 		return
 	}
 	logger.Info(fmt.Sprintf("Получено записей о МО: %d\n", len(moList)))
@@ -179,7 +178,8 @@ func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger, lastInser
 		if err != nil {
 			log.Fatalf("Ошибка формирования файла Excel: %v", err)
 		}
-		file_name := fmt.Sprintf("%s/M%s_%s.xlsx", expDirectory, v, time.Now().Format("2006-01-02T15-04-05"))
+		// file_name := fmt.Sprintf("%s/M%s_%s.xlsx", expDirectory, v, time.Now().Format("2006-01-02T15-04-05"))
+		file_name := fmt.Sprintf("%s/M%s_%s.xlsx", expDirectory, v, time.Now().Format("2006-01-02"))
 		if err := f.SaveAs(file_name); err != nil {
 			fmt.Println(err)
 		}
