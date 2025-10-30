@@ -69,6 +69,8 @@ func main() {
 	}
 
 	fmt.Println(result)
+	fmt.Println("ID запроса:", result.Body.GetPersonDataResponse.ExternalRequestId)
+	fmt.Println("OIP персоны:", result.Body.GetPersonDataResponse.Pd.Oip)
 
 }
 

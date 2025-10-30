@@ -45,7 +45,12 @@ func main() {
 	if err != nil {
 		logInstance.Error("SQL Server connected fail", err)
 	}
-	defer dbPool.Close()
+	defer func() {
+		err := dbPool.Close()
+		if err != nil {
+			logInstance.Error("Closed dbPool error", err)
+		}
+	}()
 
 	srzRep := repositories.NewSrzRepository(dbPool, logInstance)
 
@@ -64,7 +69,7 @@ func main() {
 		gocron.DailyJob(
 			1,
 			gocron.NewAtTimes(
-				gocron.NewAtTime(1, 30, 0),
+				gocron.NewAtTime(20, 0, 0),
 			),
 		),
 		gocron.NewTask(
@@ -77,16 +82,23 @@ func main() {
 					logInstance.Info("Сервис в работе. Создан новый файл логов.")
 				}
 				logInstance.Info("Старт задачи")
-				lastId, err := srzRep.CreateRequest(config.GetApiVersion())
-				if err != nil {
-					log.Fatalf("Server failed: %v", err)
+				id, ok := srzRep.CheckRequest(time.Now().Format("2006-01-02T15:04:05"))
+				if !ok {
+					logInstance.Info("Актульный запрос среза в БД не найден, отправляем запрос в ФЕРЗЛ")
+					lastId, err := srzRep.CreateRequest(config.GetApiVersion())
+					if err != nil {
+						log.Fatalf("Server failed: %v\n", err)
+					}
+					lastInsertId = lastId
+				} else {
+					lastInsertId = id
 				}
-				lastInsertId = lastId
 				logInstance.Info(fmt.Sprintf("ID запроса: %d\n", lastInsertId))
 				logInstance.Info("Остановка задачи")
 			},
 			lastInsertId,
 		),
+		gocron.WithName("Запрос среза открепления из ФЕРЗЛ"),
 	)
 	if err != nil {
 		log.Fatalf("Error %s", err)
@@ -99,7 +111,7 @@ func main() {
 		gocron.DailyJob(
 			1,
 			gocron.NewAtTimes(
-				gocron.NewAtTime(2, 30, 0),
+				gocron.NewAtTime(21, 0, 0),
 			),
 		),
 		gocron.NewTask(
@@ -116,6 +128,7 @@ func main() {
 				logInstance.Info("Остановка задачи")
 			},
 		),
+		gocron.WithName("Формирование списков открепленных для МО"),
 	)
 	if err != nil {
 		log.Fatalf("Error %s", err)
@@ -144,7 +157,8 @@ func main() {
 
 func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger, lastInsertId int64) {
 	logger.Info("Получение списка МО из БД")
-	moList, err := rep.GetMo(lastInsertId)
+	currentDate := time.Now().Format("20060102")
+	moList, err := rep.GetMo(lastInsertId, currentDate)
 	if err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
@@ -155,11 +169,33 @@ func GetOtkrep(rep *repositories.SrzRepository, logger *logger.Logger, lastInser
 	logger.Info(fmt.Sprintf("Получено записей о МО: %d\n", len(moList)))
 
 	logger.Info("Получение данных об откреплениях из БД")
-	data, err := rep.GetReport(lastInsertId)
+	data, err := rep.GetReport(lastInsertId, currentDate)
 	if err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 	logger.Info(fmt.Sprintf("Получено записей об откреплениях: %d\n", len(data)))
+
+	logger.Info("Загрузка истории отправки открепления в БД OtkrepLog")
+	for _, v := range data {
+		var err error
+		pid, err := strconv.Atoi(v.PID)
+		if err != nil {
+			logger.Error("Ошибка конвертации PID из строки в число", err)
+		}
+		err = rep.InsertLog(pid, v.ENP, v.LpuCodeNew, v.LpuNameNew, v.LpuStart.Format("2006-01-02"),
+			v.LpuCode, v.LpuFinish.Format("2006-01-02"), lastInsertId, time.Now().Format("2006-01-02"), fmt.Sprintf("M%s_%s.xlsx", v.LpuCode, time.Now().Format("2006-01-02")))
+		if err != nil {
+			logger.Error("Ошибка при вставке данных в БД OtkrepLog", err)
+		}
+	}
+	logger.Info("Загрузка истории отправки открепления в БД OtkrepLog выполнена.")
+	logger.Info("Закрытие прикрепления в БД по срезу из ФЕРЗЛ.")
+	err = rep.ClosePrikrep(lastInsertId)
+	if err != nil {
+		logger.Error("Ошибка закрытия прикрепления в БД по срезу из ФЕРЗЛ", err)
+	} else {
+		logger.Info("Закрытие прикрепления в БД по срезу из ФЕРЗЛ выполнено.")
+	}
 
 	var mo []models.Otkrep
 	for _, v := range moList {

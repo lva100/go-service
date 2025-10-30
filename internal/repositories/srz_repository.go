@@ -11,6 +11,26 @@ import (
 	"github.com/lva100/go-service/pkg/logger"
 )
 
+/*
+const queryStr = `
+	select h.pid,p.ENP,p.LPU,l.CAPTION,p.LPUDT,h.lpu,h.lpudx
+	from [srz3_00].dbo.histlpu h
+	join (
+			select b.people, max(isnull(h.lpudx,'19000101')) as maxLPUDX
+			from [srz3_00].dbo.MO_BUFFER b
+			join [srz3_00].dbo.histlpu h on h.pid = b.PEOPLE
+			where b.MO_LOG in (
+					select ID from [srz3_00].[dbo].[MO_LOG] where DT between '20251027' and DATEADD(day,1,'20251027')
+			) and b.people is not null
+			group by b.people
+	) t on h.PID=t.PEOPLE and h.LPUDX=t.maxLPUDX
+	join [srz3_00].dbo.people p on p.ID=h.PID
+	join [srz3_00].[dbo].[LPU] l on p.LPU=l.REGNUM
+	where h.LPU<>998
+	order by pid
+`
+*/
+
 type SrzRepository struct {
 	Dbpool       *sql.DB
 	CustomLogger *logger.Logger
@@ -23,8 +43,8 @@ func NewSrzRepository(dbpool *sql.DB, logger *logger.Logger) *SrzRepository {
 	}
 }
 
-func (r *SrzRepository) GetMo(id int64) ([]string, error) {
-	query := `
+func (r *SrzRepository) GetMo(id int64, dt string) ([]string, error) {
+	/*query := `
 		  select distinct p.lpu
 			from VAtt v
 			join [srz3_00].dbo.PEOPLE p on v.pid = p.id
@@ -32,13 +52,39 @@ func (r *SrzRepository) GetMo(id int64) ([]string, error) {
 			and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
 			and  v.LPUPROFILE = 1
 			order by p.lpu
-	`
+	`*/
+	query := `select distinct lpu from (
+					select h.lpu
+					from [srz3_00].dbo.histlpu h
+					join (
+							select b.people, max(isnull(h.lpudx,'19000101')) as maxLPUDX
+							from [srz3_00].dbo.MO_BUFFER b  
+							join [srz3_00].dbo.histlpu h on h.pid = b.PEOPLE
+							where b.MO_LOG in (
+									select ID from [srz3_00].[dbo].[MO_LOG] 
+									where DT between @dt 
+													and DATEADD(day,1,@dt)
+							) and b.people is not null
+							group by b.people
+					) t on h.PID=t.PEOPLE and h.LPUDX=t.maxLPUDX
+					join [srz3_00].dbo.people p on p.ID=h.PID
+					join [srz3_00].[dbo].[LPU] l on p.LPU=l.REGNUM
+					where h.LPU<>998
+					union all
+					select p.lpu
+					from VAtt v
+					join [srz3_00].dbo.PEOPLE p on v.pid = p.id
+					where MPI = @id
+					and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
+					and  v.LPUPROFILE = 1
+					) a
+					order by lpu`
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	var moItems []string
 
-	rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("id", id))
+	rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("id", id), sql.Named("dt", dt))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			r.CustomLogger.Error("Timeout from database", err)
@@ -64,28 +110,45 @@ func (r *SrzRepository) GetMo(id int64) ([]string, error) {
 	return moItems, nil
 }
 
-func (r *SrzRepository) GetReport(id int64) ([]models.Otkrep, error) {
-	query := `
-		  select v.ENP,
-				v.LPU LpuCodeNew,
-				LPUNAME LpuNameNew,
-				v.LPUDT LpuStart,
-				DATEADD(day, -1, v.LPUDT) LpuFinish,
-				p.lpu LpuCode
-			from VAtt v
-			join [srz3_00].dbo.PEOPLE p on v.pid = p.id
-			where MPI = @id
-			and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
-			and  v.LPUPROFILE = 1
-			order by p.lpu
-	`
+func (r *SrzRepository) GetReport(id int64, dt string) ([]models.Otkrep, error) {
+	query := `select h.pid PID,p.ENP,p.LPU LpuCodeNew,l.CAPTION LpuNameNew
+									,p.LPUDT LpuStart ,h.lpudx LpuFinish,h.lpu LpuCode
+						from [srz3_00].dbo.histlpu h
+						join (
+								select b.people, max(isnull(h.lpudx,'19000101')) as maxLPUDX
+								from [srz3_00].dbo.MO_BUFFER b  
+								join [srz3_00].dbo.histlpu h on h.pid = b.PEOPLE
+								where b.MO_LOG in (
+										select ID from [srz3_00].[dbo].[MO_LOG] 
+										where DT between @dt 
+														and DATEADD(day,1,@dt)
+								) and b.people is not null
+								group by b.people
+						) t on h.PID=t.PEOPLE and h.LPUDX=t.maxLPUDX
+						join [srz3_00].dbo.people p on p.ID=h.PID
+						join [srz3_00].[dbo].[LPU] l on p.LPU=l.REGNUM
+						where h.LPU<>998
+						union all
+						select v.pid PID,v.ENP,
+							v.LPU LpuCodeNew,
+							LPUNAME LpuNameNew,
+							v.LPUDT LpuStart,
+							DATEADD(day, -1, v.LPUDT) LpuFinish,
+							p.lpu LpuCode
+						from VAtt v
+						join [srz3_00].dbo.PEOPLE p on v.pid = p.id
+						where MPI = @id
+						and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
+						and  v.LPUPROFILE = 1
+						order by p.lpu`
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	var otkrepItems []models.Otkrep
 
 	// rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("dt_start", from), sql.Named("dt_end", to))
-	rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("id", id))
+	rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("id", id), sql.Named("dt", dt))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			r.CustomLogger.Error("Timeout from database", err)
@@ -97,6 +160,7 @@ func (r *SrzRepository) GetReport(id int64) ([]models.Otkrep, error) {
 	for rows.Next() {
 		var otkrepItem models.Otkrep
 		err := rows.Scan(
+			&otkrepItem.PID,
 			&otkrepItem.ENP,
 			&otkrepItem.LpuCodeNew,
 			&otkrepItem.LpuNameNew,
@@ -113,6 +177,24 @@ func (r *SrzRepository) GetReport(id int64) ([]models.Otkrep, error) {
 		r.CustomLogger.Error("SQL Query error", err)
 	}
 	return otkrepItems, nil
+}
+
+func (r *SrzRepository) CheckRequest(dt string) (int64, bool) {
+	query := `select ID
+							from MPI_MSG
+							where RTYPE='getViewDataAttachStartRequest'
+										and SUBSTRING(CARGO,1,1)=4
+										and DT between DATEADD(day,-1,@dt) and @dt`
+	var id int64
+	if err := r.Dbpool.QueryRowContext(
+		context.Background(),
+		query,
+		sql.Named("dt", dt),
+	).Scan(&id); err != nil {
+		r.CustomLogger.Error("SQL Query error", err)
+		return 0, false
+	}
+	return id, true
 }
 
 func (r *SrzRepository) CreateRequest(apiVer string) (int64, error) {
@@ -141,81 +223,46 @@ func (r *SrzRepository) CreateRequest(apiVer string) (int64, error) {
 	return lastInseredId, nil
 }
 
-/*
-func (r *SrzRepository) InsertFLK(fname, fname_i string, phase_k int, status,
-	schet_code, ferr_id string, n_line int, n_col, fc_element, code_err, text_err string) error {
-	query := `INSERT INTO Flk_err
-           (FNAME,FNAME_I,PHASE_K,STATUS,SCHET_CODE
-           ,FERR_ID,N_LINE,N_COL,FC_ELEMENT,CODE_ERR
-           ,TEXT_FERR)
-     VALUES (@FNAME,@FNAME_I,@PHASE_K,@STATUS,@SCHET_CODE
-           ,@FERR_ID,@N_LINE,@N_COL,@FC_ELEMENT,@CODE_ERR
-           ,@TEXT_FERR)`
+func (r *SrzRepository) InsertLog(pid int, enp, lpuPrikrepCode, lpuPrikrepName string,
+	lpudt string, lpuOtkrepCode string, lpudx string, npackage int64, processdt string, filename string) error {
+	query := `INSERT INTO [Lpu_History].[dbo].[OtkrepLog]
+									(PID,ENP,LPU_PRIK_CODE,LPU_PRIK_NAME,LPUDT
+									,LPU_OTKREP_CODE,LPUDX,NPACKAGE,PROCESSDATE,FILENAME)
+						VALUES (@PID,@ENP,@LPU_PRIK_CODE,@LPU_PRIK_NAME,@LPUDT
+									,@LPU_OTKREP_CODE,@LPUDX,@NPACKAGE,@PROCESSDATE,@FILENAME)`
 	_, err := r.Dbpool.ExecContext(
 		context.Background(),
 		query,
-		sql.Named("FNAME", fname), sql.Named("FNAME_I", fname_i), sql.Named("PHASE_K", phase_k), sql.Named("STATUS", status),
-		sql.Named("SCHET_CODE", schet_code), sql.Named("FERR_ID", ferr_id), sql.Named("N_LINE", n_line), sql.Named("N_COL", n_col),
-		sql.Named("FC_ELEMENT", fc_element), sql.Named("CODE_ERR", code_err), sql.Named("TEXT_FERR", text_err),
+		sql.Named("PID", pid), sql.Named("ENP", enp), sql.Named("LPU_PRIK_CODE", lpuPrikrepCode), sql.Named("LPU_PRIK_NAME", lpuPrikrepName), sql.Named("LPUDT", lpudt), sql.Named("LPU_OTKREP_CODE", lpuOtkrepCode), sql.Named("LPUDX", lpudx), sql.Named("NPACKAGE", npackage), sql.Named("PROCESSDATE", processdt), sql.Named("FILENAME", filename),
 	)
 	return err
 }
 
-func (r *SrzRepository) InsertLK(fname, fname_i string, phase_k int, status,
-	schet_code, lerr_id, n_zap, lerr_code, oshib_id, nsi_schet, lc_element,
-	value, parent_el, parent_el_id, text_lerr string) error {
-	query := `INSERT INTO Lk_err
-           (FNAME,FNAME_I,PHASE_K,STATUS,SCHET_CODE,LERR_ID,N_ZAP,LERR_CODE,
-					 OSHIB_ID,NSI_SCHET,LC_ELEMENT,VALUE,PARENT_EL,PARENT_EL_ID,TEXT_LERR)
-     VALUES (@FNAME,@FNAME_I,@PHASE_K,@STATUS,@SCHET_CODE,@LERR_ID,@N_ZAP,@LERR_CODE,
-					 @OSHIB_ID,@NSI_SCHET,@LC_ELEMENT,@VALUE,@PARENT_EL,@PARENT_EL_ID,@TEXT_LERR)`
+func (r *SrzRepository) ClosePrikrep(id int64) error {
+	query := `update h
+						set 
+						h.lpudx = DATEADD(day, -1, v.LPUDT),
+						h.REMARK = 'Прикрепление закрыто по письму ФФОМС о двойных прикреплениях'
+						from [srz3_00].dbo.histlpu h 
+						join VAtt v on v.pid = h.pid
+							join [srz3_00].dbo.PEOPLE p on v.pid = p.id
+												where MPI = @id
+												and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
+												and  v.LPUPROFILE = 1
+																and p.lpu = h.lpu and h.lpudx is null
+						update p
+						set 
+						p.lpudx = DATEADD(day, -1, v.LPUDT)
+						from [srz3_00].dbo.PEOPLE p
+						join VAtt v on v.pid = p.id
+								where MPI = @id
+												and v.lpudt > p.lpudt and v.lpudx is null and p.lpudx is null
+												and  v.LPUPROFILE = 1
+						`
 	_, err := r.Dbpool.ExecContext(
 		context.Background(),
 		query,
-		sql.Named("FNAME", fname), sql.Named("FNAME_I", fname_i), sql.Named("PHASE_K", phase_k), sql.Named("STATUS", status),
-		sql.Named("SCHET_CODE", schet_code), sql.Named("LERR_ID", lerr_id), sql.Named("N_ZAP", n_zap), sql.Named("LERR_CODE", lerr_code),
-		sql.Named("OSHIB_ID", oshib_id), sql.Named("NSI_SCHET", nsi_schet), sql.Named("LC_ELEMENT", lc_element), sql.Named("VALUE", value), sql.Named("PARENT_EL", parent_el), sql.Named("PARENT_EL_ID", parent_el_id), sql.Named("TEXT_LERR", text_lerr),
+		sql.Named("id", id),
 	)
 	return err
 }
-*/
-/*
-func (r *ErrRepository) GetReport(from, to string) ([]model.UslReport, error) {
-	query := "SELECT 1"
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
-	defer cancel()
-
-	var repItems []model.UslReport
-
-	rows, err := r.Dbpool.QueryContext(ctx, query, sql.Named("dt_start", from), sql.Named("dt_end", to))
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			log.Println("Timeout from database", err)
-		}
-		log.Println("Database query timed out", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var repItem model.UslReport
-		err := rows.Scan(
-			&repItem.Start,
-			&repItem.Code_MO,
-			&repItem.OrgName,
-			&repItem.Code_Usl,
-			&repItem.MC,
-			&repItem.MF,
-			&repItem.Usl_vol,
-			&repItem.Usl_fin,
-		)
-		if err != nil {
-			log.Println("SQL Query execute wrong", err)
-		}
-		repItems = append(repItems, repItem)
-	}
-	if err = rows.Err(); err != nil {
-		log.Println("SQL Query error", err)
-	}
-	return repItems, nil
-}
-*/
